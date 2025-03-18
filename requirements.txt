@@ -1,0 +1,4 @@
+flask
+flask-socketio
+pyttsx3
+openai-whisper

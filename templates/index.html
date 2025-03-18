@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Real-time Speech-to-Text with Vosk</title>
+  <!-- Use Socket.IO client (v4.x) -->
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>Real-time Speech-to-Text Demo</h1>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <div id="transcription" style="margin-top:20px; font-size:1.5em;"></div>
+  <!-- Audio element for playing TTS output -->
+  <audio id="ttsAudio" controls style="display:none;"></audio>
+
+  <script>
+    let socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+    let mediaRecorder = null;
+    let audioChunks = []; // Array to accumulate audio data
+
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const transcriptionDiv = document.getElementById("transcription");
+    const ttsAudio = document.getElementById("ttsAudio");
+
+    // Listen for transcription events from the server
+    socket.on("transcription", function(data) {
+      console.log("Received transcription:", data.text);
+      transcriptionDiv.innerText = data.text;
+    });
+
+    // Listen for TTS audio data and play it
+    socket.on("tts_audio", function(data) {
+      console.log("Received TTS audio data");
+      // Set the audio source to the base64 data and play it
+      ttsAudio.src = "data:audio/wav;base64," + data.audio;
+      ttsAudio.style.display = "block";  // Make sure it is visible if needed
+      ttsAudio.play();
+    });
+
+    startBtn.onclick = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("getUserMedia is not supported in your browser. Use a modern browser with HTTPS or localhost.");
+        return;
+      }
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      transcriptionDiv.innerText = "";
+      audioChunks = []; // Reset the chunks for a new recording
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+
+        // Push each data chunk into the audioChunks array
+        mediaRecorder.ondataavailable = function(event) {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        // When recording stops, combine chunks and send complete audio
+        mediaRecorder.onstop = function() {
+          const completeBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.onload = function() {
+            const base64data = reader.result.split(",")[1];
+            socket.emit("audio_chunk", base64data);
+          };
+          reader.readAsDataURL(completeBlob);
+        };
+
+        // Start recording without a timeslice
+        mediaRecorder.start();
+      } catch (err) {
+        console.error("Error accessing microphone:", err);
+        alert("Could not access your microphone. Please check permissions.");
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    };
+
+    stopBtn.onclick = () => {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+        mediaRecorder = null;
+      }
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    };
+  </script>
+</body>
+</html>
