@@ -105,4 +105,4 @@ def index():
 
 if __name__ == "__main__":
     # Run the Flask-SocketIO server on port 5001
-    socketio.run(app, host="0.0.0.0", port=5001, debug=False)
+    socketio.run(app, host="0.0.0.0", port=5003, debug=False)
