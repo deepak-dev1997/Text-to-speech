@@ -12,8 +12,11 @@ import torch
 app = Flask(__name__)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(device)
+compute_type = "float16" if device == "cuda" else "int8"
 
+print("Using device:", device)
+
+# Load Whisper model for transcription
 whisper_model = whisper.load_model("base", device=device)
 
 @app.route('/transcribe', methods=['POST'])
@@ -31,34 +34,31 @@ def transcribe_audio():
     file.save(file_path)
 
     try:
+        # Transcription with Whisper
         result = whisper_model.transcribe(file_path)
         transcription = result.get("text", "")
         language = result.get("language", "en")
 
-        # Load the audio file as a numpy array at 16kHz
-        audio = whisperx.load_audio(file_path, sr=16000)
+        # Load audio with WhisperX utility
+        audio = whisperx.load_audio(file_path)
 
-        model_a, metadata = whisperx.load_align_model(language, device)
-        # Pass the audio array instead of file_path
-        aligned_result = whisperx.align(result, audio, model_a, metadata, device)
+        # Alignment (no auth required)
+        align_model, metadata = whisperx.load_align_model(language, device)
+        aligned_result = whisperx.align(result["segments"], align_model, metadata, audio, device)
 
-        diarization_model = whisperx.load_diarization_model(device)
-        # Also pass the audio array to the diarize function
-        diarization_segments = whisperx.diarize(audio, diarization_model, device)
-
-        utterances = []
-        for seg in diarization_segments:
-            utterance = {
+        segments = []
+        for seg in aligned_result["segments"]:
+            segments.append({
                 "start": seg.get("start"),
                 "end": seg.get("end"),
-                "speaker": seg.get("speaker", "unknown")
-            }
-            utterances.append(utterance)
+                "text": seg.get("text", "")
+            })
 
         response = {
             "transcription": transcription,
-            "utterances": utterances
+            "segments": segments
         }
+
     except Exception as e:
         response = {"error": str(e)}
     finally:
