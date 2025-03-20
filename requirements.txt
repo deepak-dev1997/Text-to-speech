@@ -2,3 +2,5 @@ flask
 flask-socketio
 pyttsx3
 openai-whisper
+whisperx
+torch
